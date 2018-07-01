@@ -490,37 +490,19 @@ exports.downloadMediaFiles = async ({
   )
 
 const prepareACFChildNodes = (
-  obj,
+  field,
   entityId,
   topLevelIndex,
   type,
   children,
   childrenNodes
 ) => {
-  // Replace any child arrays with pointers to nodes
-  _.each(obj, (value, key) => {
-    if (_.isArray(value) && value[0] && value[0].acf_fc_layout) {
-      obj[`${key}___NODE`] = value.map(
-        v =>
-          prepareACFChildNodes(
-            v,
-            entityId,
-            topLevelIndex,
-            type + key,
-            children,
-            childrenNodes
-          ).id
-      )
-      delete obj[key]
-    }
-  })
-
   const acfChildNode = {
-    ...obj,
+    ...field,
     id: entityId + topLevelIndex + type,
     parent: entityId,
     children: [],
-    internal: { type, contentDigest: digest(JSON.stringify(obj)) },
+    internal: { type, contentDigest: digest(JSON.stringify(field)) },
   }
 
   children.push(acfChildNode.id)
@@ -533,6 +515,40 @@ const prepareACFChildNodes = (
   return acfChildNode
 }
 
+// This function recursively checks for flexible content fields.
+const processACF = (entity, parent, children, childrenNodes) => {
+  _.each(parent, (value, key) => {
+    // If this is a flexible content field.
+    if (_.isArray(value) && value[0] && value[0].acf_fc_layout) {
+      parent[`${key}_${entity.type}___NODE`] = parent[key].map(
+        (field, i) => {
+          // Check for flexible content fields within this field.
+          processACF(entity, field, children, childrenNodes)
+          const type = `WordPressAcf_${field.acf_fc_layout}`
+          delete field.acf_fc_layout
+
+          const acfChildNode = prepareACFChildNodes(
+            field,
+            entity.id + i,
+            key,
+            type,
+            children,
+            childrenNodes
+          )
+
+          return acfChildNode.id
+        }
+      )
+
+      delete parent[key]
+    }
+    if (_.isObject(value)) {
+      // This field has nested fields which we need to check.
+      processACF(entity, value, children, childrenNodes)
+    }
+  })
+}
+
 exports.createNodesFromEntities = ({ entities, createNode }) => {
   entities.forEach(e => {
     // Create subnodes for ACF Flexible layouts
@@ -540,29 +556,7 @@ exports.createNodesFromEntities = ({ entities, createNode }) => {
     let children = []
     let childrenNodes = []
     if (entity.acf) {
-      _.each(entity.acf, (value, key) => {
-        if (_.isArray(value) && value[0] && value[0].acf_fc_layout) {
-          entity.acf[`${key}_${entity.type}___NODE`] = entity.acf[key].map(
-            (f, i) => {
-              const type = `WordPressAcf_${f.acf_fc_layout}`
-              delete f.acf_fc_layout
-
-              const acfChildNode = prepareACFChildNodes(
-                f,
-                entity.id + i,
-                key,
-                type,
-                children,
-                childrenNodes
-              )
-
-              return acfChildNode.id
-            }
-          )
-
-          delete entity.acf[key]
-        }
-      })
+      processACF(entity, entity.acf, children, childrenNodes)
     }
 
     let node = {

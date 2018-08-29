@@ -102,6 +102,12 @@ Fetching the JSON data from ${validRoutes.length} valid API Routes...
       )
     }
 
+    validRoutes = validRoutes.filter(({ url }) => !_excludedRoutes.some(e => {
+        const exclude = minimatch(url, e)
+        if (_verbose) console.log(`Excluding: `, url, e)
+        return exclude
+    }))
+
     for (let route of validRoutes) {
       entities = entities.concat(
         await fetchData({

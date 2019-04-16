@@ -11,6 +11,8 @@ export const getStaticQueryData = () => staticQueryData
 export const getPageQueryData = () => pageQueryData
 export const getIsInitialized = () => isInitialized
 
+window.___getPageQueryData = getPageQueryData
+
 export default function socketIo() {
   if (process.env.NODE_ENV !== `production`) {
     if (!socket) {
